@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>BS Midi Mapper</title>
+	<script type="importmap">
+		{
+			"imports": {
+			  "navigo": "https://cdn.pika.dev/navigo/v7", 
+			  "redux": "https://cdn.pika.dev/redux/v4",
+			  "symbol-observable/": "https://cdn.pika.dev/symbol-observable/v1"
+			}
+		  }	
+	</script>
+	<style>
+		file-drop {
+			border-radius: 2em;
+			padding: 2em;
+			border: dotted black 2px;
+			margin: 2em;
+			display: inline-block;
+		}
+
+		file-drop.drop-valid {
+			background-color: green;
+		}
+
+		file-drop.drop-invalid {
+			background-color: red;
+		}
+	</style>
+	<script type="text/javascript" src="https://unpkg.com/@tonejs/midi"></script>
+	<script src='https://unpkg.com/file-drop-element@0.2.0/dist/filedrop.mjs' type='module'></script>
+</head>
+
+<body>
+	<style type="text/css">
+		
+		textarea {
+			font-family: monospace;
+			height: 300px;
+			width: 100%;
+			display: inline-block;
+			position: relative;
+			float: left;
+		}
+
+		#Results #BSResults{
+			position: relative;
+			width: 100%;
+			margin: 10px auto;
+		}
+
+		#header {width:100%}
+		#header div{
+			position: relative;
+			width: 100%;
+			text-align: center;
+			height: 40px;
+			font-size: 16px;
+			margin: 10px auto;
+			font-family: sans-serif;
+		}
+	</style>
+	<div>
+		<div id='header'>
+			<div id="Description">Beat Saber Level Editor</div>
+			<div id="error-space"></div>
+		</div>
+		<file-drop id="midi-drop" accept="audio/midi">
+			Drop a midi file here
+		</file-drop>
+		<file-drop id="audio-drop">
+			Drop an audio file here
+		</file-drop>
+		<div id="status"></div>
+		<div id="time"></div>
+		<div id="beat"></div>	
+		<div id="note"></div>
+
+
+		<audio controls style="width:200px">
+			Audio not supported
+		</audio>
+		<div id="BSResults">
+			<label for="BSResultsText">Generated BS Json</label>
+
+			<textarea id="BSResultsText" placeholder="json output..."></textarea>
+		</div>
+		<div id="Results">
+				<label for="ResultsText">Parsed Midi</label>
+				<textarea id="ResultsText" placeholder="json output..."></textarea>
+			</div>
+		</div>
+
+
+	<script type="text/javascript">
+
+
+		if (!(window.File && window.FileReader && window.FileList && window.Blob)) {
+			document.querySelector("#error-space").textContent += "Reading files not supported by this browser\n";
+		} else {
+
+			const midiDrop = document.querySelector("#midi-drop")
+
+
+			midiDrop.addEventListener("filedrop", (e) => {
+				console.log(e.files[0]);
+				parseFile(e.files[0]);
+			})
+
+			const audioDrop = document.querySelector("#audio-drop")
+
+
+			audioDrop.addEventListener("filedrop", (e) => {
+				console.log(e.files[0]);
+				let reader = new FileReader();
+
+				reader.onload = () => {
+					document.querySelector('audio').src = reader.result;
+				};
+
+				reader.readAsDataURL(e.files[0]);
+
+			})
+
+
+		}
+
+		let status = document.querySelector('#status');
+		let time = document.querySelector('#time');
+		let beat = document.querySelector('#beat');
+		let note = document.querySelector('#note');
+
+
+		let bpm = 133;
+		let bps = bpm/60;
+
+		let interval = setInterval(()=>{
+			time.textContent = audioplayer.currentTime;
+			let currBeat = audioplayer.currentTime * bps;
+			beat.textContent = currBeat;
+			if(_notes && _notes.length >0) {
+				let remainingNotes = _notes.filter((note)=>{
+					return note._time>currBeat;
+				})
+				let pointerNote = remainingNotes[0];
+				console.log(pointerNote)
+				note.textContent = JSON.stringify(pointerNote, undefined, 2);
+			}
+		},0.5)
+
+		let audioplayer = document.querySelector('audio');
+		audioplayer.addEventListener("play", (e)=>{
+			status.textContent = "Playing";
+		})
+		audioplayer.addEventListener("pause", (e)=>{
+			status.textContent = "Paused";
+		})
+
+
+
+		let currentMidi = null
+
+		function midiToBeatsaber(midiJson) {
+			let cut = {
+				up: 0,
+				down: 1,
+				left: 2,
+				right: 3,
+				upleft: 4,
+				upright: 5,
+				downleft: 6,
+				downright: 7,
+				dot: 8
+			}
+			let type = {
+				red: 0,
+				blue: 1,
+				bomb: 3
+			}
+			// v2.0
+			// ouput = {
+			// 	"_version": "2.0.0",
+			// 	"_BPMChanges": [],
+			// 	"_events": [],
+			// 	"_notes": [],
+			// 	"_obstacles": [],
+			// 	"_bookmarks": []
+			// }
+			let output = {
+				"_version": "1.6.0",
+				"_beatsPerMinute": 133.80000305175781,
+				"_beatsPerBar": 16,
+				"_noteJumpSpeed": 12,
+				"_noteJumpStartBeatOffset": 0,
+				"_shuffle": 0,
+				"_shufflePeriod": 0.5,
+				"_time": 129,
+				"_BPMChanges": [],
+				"_warnings": [],
+				"_information": [],
+				"_suggestions": [],
+				"_requirements": [],
+				"_events": [],
+				"_notes": []
+			}
+			// time : Note time position in beats
+			// lineIndex : Note horizontal position (0 to 3, start from left)
+			// lineLayer : Note vertical position (0 to 2, start from bottom)
+			// type : Note type (0 = red, 1 = blue, 3 = bomb)
+			// cutDirection : Note cut direction (0 = up, 1 = down, 2 = left, 3 = right, 4 = up left, 5 = up right, 6 = down left, 7 = down right, 8 = no direction)
+			let note = {
+				"_time": 428,
+				"_lineIndex": 0,
+				"_lineLayer": 0,
+				"_type": type.blue,
+				"_cutDirection": cut.up,
+				"id": "ee4e9ce2-ab55-11e9-bb1d-c179649583a0"
+			}
+
+			output._beatsPerMinute = midiJson.header.tempos[0].bpm;
+			let ticksPerBeat = midiJson.header.ppq;//*4; //assuming 4/4 for now
+
+			midiJson.tracks[0].notes.forEach((note) => {
+				let newnote = {
+					//__note : note,
+					_lineIndex: lineIndex(note),
+					_lineLayer: lineLayer(note),
+					_time: note.ticks / ticksPerBeat,
+					_type: lineIndex(note) > 1 ? type.blue : type.red,
+					_cutDirection: lineLayer(note) > 1 ? cut.up : cut.down
+				}
+				output._notes.push(newnote);
+			})
+			return output;
+
+
+
+		}
+		function lineLayer(note) {
+			return Math.floor((note.midi - 36) / 4)
+		}
+		function lineIndex(note) {
+			return (note.midi - 36) % 4
+		}
+
+		var _notes;
+		function parseFile(file) {
+			//read the file
+			const reader = new FileReader()
+			reader.onload = function (e) {
+				const midi = new Midi(e.target.result)
+				document.querySelector("#ResultsText").value = JSON.stringify(midi, undefined, 2)
+				jsonfile = midiToBeatsaber(midi);
+				_notes = jsonfile._notes
+				document.querySelector("#BSResultsText").value = JSON.stringify(jsonfile, undefined, 2)
+				currentMidi = midi;
+			}
+			reader.readAsArrayBuffer(file)
+		}
+
+
+	</script>
+
+</body>
+
+</html>
