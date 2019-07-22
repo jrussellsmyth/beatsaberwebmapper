@@ -16,7 +16,7 @@
 		"ms-vscode.vscode-typescript-tslint-plugin"
 	],
 	"runArgs": [
-		"-v","/Users/jrussell/.npm:/root/.npm",
-		"-v","/Users/jrussell/.ssh:/root/.ssh"
+		"-v","${env:HOME}${env:USERPROFILE}/.npm:/root/.npm",
+		"-v","${env:HOME}${env:USERPROFILE}/.ssh:/root/.ssh"
 	]
 }
